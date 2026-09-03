@@ -12,6 +12,13 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import copy
+
+from ansible_base.lib.utils.settings import get_setting
+from ansible_base.lib.utils.validation import (
+    CLEAN_TEXT_DESCRIPTION,
+    CLEAN_TEXT_PATTERN,
+)
 from rest_framework import serializers
 
 from aap_eda.core import models, validators
@@ -36,6 +43,35 @@ class CredentialTypeSerializer(serializers.ModelSerializer):
             "injectors",
             *read_only_fields,
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not get_setting(
+            "ENHANCED_INPUT_VALIDATION_ENABLED", False
+        ):
+            return data
+
+        inputs = data.get("inputs")
+        if not isinstance(inputs, dict):
+            return data
+
+        fields = inputs.get("fields")
+        if not fields:
+            return data
+
+        inputs = copy.deepcopy(inputs)
+        for field in inputs["fields"]:
+            if (
+                field.get("type") == "string"
+                and not field.get("secret")
+            ):
+                field["pattern"] = CLEAN_TEXT_PATTERN
+                field["pattern_description"] = (
+                    CLEAN_TEXT_DESCRIPTION
+                )
+
+        data["inputs"] = inputs
+        return data
 
 
 class CredentialTypeCreateSerializer(serializers.ModelSerializer):
