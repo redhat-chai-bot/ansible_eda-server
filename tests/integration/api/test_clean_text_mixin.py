@@ -485,6 +485,34 @@ class TestProjectCleanText:
         )
         assert serializer.is_valid(), serializer.errors
 
+    def test_grandfather_legacy_name_on_api_description_update(
+        self,
+        default_project: models.Project,
+        admin_client: APIClient,
+    ):
+        """Regression: a project with a pre-existing legacy-invalid name
+        can have an unrelated field (description) updated through the API
+        without the unchanged name being re-validated.
+
+        The legacy state is established via ORM (bypassing serializer
+        validation), simulating a row that predates the introduction of
+        clean-text checks.
+        """
+        invalid_name = "project;legacy<invalid>"
+        models.Project.objects.filter(pk=default_project.pk).update(
+            name=invalid_name,
+        )
+
+        response = admin_client.patch(
+            f"{api_url_v1}/projects/{default_project.id}/",
+            data={"description": "Updated via API"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        default_project.refresh_from_db()
+        assert default_project.name == invalid_name
+        assert default_project.description == "Updated via API"
+
     def test_rejects_changed_invalid_name_on_update(
         self, default_project: models.Project
     ):
